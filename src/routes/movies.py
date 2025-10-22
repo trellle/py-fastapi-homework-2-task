@@ -47,10 +47,17 @@ async def get_movies(
 
 
 @router.post("/movies/", response_model=MovieDetailSchema)
-async def create_movie(payload: MovieCreateRequestSchema, db: AsyncSession = Depends(get_postgresql_db)) -> MovieDetailSchema:
-    response = await db.execute(select(MovieModel).where((MovieModel.name == payload.name) & (MovieModel.date == payload.date)))
+async def create_movie(payload: MovieCreateRequestSchema,
+                       db: AsyncSession = Depends(get_postgresql_db)) -> MovieDetailSchema:
+    response = await db.execute(
+        select(MovieModel)
+        .where((MovieModel.name == payload.name) & (MovieModel.date == payload.date))
+    )
     if not response.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"A movie with the name '{payload.name}' and release date '{payload.date}' already exists.")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A movie with the name '{payload.name}' and release date '{payload.date}' already exists."
+        )
     country = await get_or_create(CountryModel, payload.country)
     languages = []
     for language_input in payload.languages:
@@ -111,7 +118,9 @@ async def delete_movie(movie_id: int, db: AsyncSession = Depends(get_postgresql_
 
 
 @router.patch("/movies/{movie_id}/", status_code=status.HTTP_200_OK)
-async def update_movie(movie_id: int, update_data: MovieUpdateRequestSchema, db: AsyncSession = Depends(get_postgresql_db)):
+async def update_movie(movie_id: int,
+                       update_data: MovieUpdateRequestSchema,
+                       db: AsyncSession = Depends(get_postgresql_db)):
     result = await db.execute(select(MovieModel).where(MovieModel.id == movie_id))
     movie_to_update = result.scalar_one_or_none()
     if not movie_to_update:

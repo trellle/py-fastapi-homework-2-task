@@ -78,7 +78,7 @@ class MovieCreateRequestSchema(BaseModel):
         if value > max_allowed:
             raise ValueError("The date must not be more than one year in the future.")
         return value
-    
+
     @field_validator("country")
     def validate_country(cls, value: str):
         if not pycountry.countries.get(alpha_3=value.upper()):

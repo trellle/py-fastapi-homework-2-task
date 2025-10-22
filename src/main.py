@@ -10,6 +10,7 @@ app = FastAPI(
     description="Description of project"
 )
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
