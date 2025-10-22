@@ -13,7 +13,6 @@ from src.schemas import (
     MovieCreateResponseSchema,
     MovieUpdateRequestSchema
 )
-from src.database.session_postgresql import get_postgresql_db
 from src.database.utils.crud_helpers import get_or_create
 
 
@@ -23,7 +22,7 @@ router = APIRouter()
 @router.get("/movies/", response_model=MovieListResponseSchema)
 async def get_movies(
     request: Request,
-    db: AsyncSession = Depends(get_postgresql_db),
+    db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1, description="Номер сторінки"),
     per_page: int = Query(
         10, ge=1, le=20, description="Кількість фільмів на сторінку"
@@ -36,7 +35,7 @@ async def get_movies(
     movies = result.scalars().all()
     if not movies or page > total_pages and total_pages != 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No movies found.")
-    base_url = request.url.path
+    base_url = request.url.path.removeprefix("/api/v1")
     return MovieListResponseSchema(
         movies=movies,
         prev_page=f"{base_url}?page={page - 1}&per_page={per_page}" if page > 1 else None,
@@ -46,30 +45,30 @@ async def get_movies(
     )
 
 
-@router.post("/movies/", response_model=MovieDetailSchema)
+@router.post("/movies/", response_model=MovieDetailSchema, status_code=status.HTTP_201_CREATED)
 async def create_movie(payload: MovieCreateRequestSchema,
-                       db: AsyncSession = Depends(get_postgresql_db)) -> MovieDetailSchema:
+                       db: AsyncSession = Depends(get_db)) -> MovieDetailSchema:
     response = await db.execute(
         select(MovieModel)
         .where((MovieModel.name == payload.name) & (MovieModel.date == payload.date))
     )
-    if not response.scalar_one_or_none():
+    if response.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"A movie with the name '{payload.name}' and release date '{payload.date}' already exists."
         )
-    country = await get_or_create(CountryModel, payload.country)
+    country = await get_or_create(CountryModel, payload.country, db)
     languages = []
     for language_input in payload.languages:
-        language = await get_or_create(LanguageModel, language_input.model_dump())
+        language = await get_or_create(LanguageModel, language_input, db)
         languages.append(language)
     genres = []
     for genre_input in payload.genres:
-        genre = await get_or_create(GenreModel, genre_input.model_dump())
+        genre = await get_or_create(GenreModel, genre_input, db)
         genres.append(genre)
     actors = []
     for actor_input in payload.actors:
-        actor = await get_or_create(ActorModel, actor_input.model_dump())
+        actor = await get_or_create(ActorModel, actor_input, db)
         actors.append(actor)
     new_movie = MovieModel(
         name=payload.name,
@@ -90,37 +89,36 @@ async def create_movie(payload: MovieCreateRequestSchema,
     return new_movie
 
 
-@router.get("/movies/{movie_id}", response_model=MovieCreateResponseSchema)
-async def get_movie(movie_id: int, db: AsyncSession = Depends(get_postgresql_db)):
+@router.get("/movies/{movie_id}/", response_model=MovieCreateResponseSchema)
+async def get_movie(movie_id: int, db: AsyncSession = Depends(get_db)):
     response = await db.execute(
-        select(distinct(MovieModel))
+        select(MovieModel)
         .where(MovieModel.id == movie_id)
         .options(joinedload(MovieModel.country))
         .options(joinedload(MovieModel.genres))
         .options(joinedload(MovieModel.actors))
         .options(joinedload(MovieModel.languages))
     )
-    movie = response.scalar_one_or_none()
+    movie = response.unique().scalar_one_or_none()
     if not movie:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movie with the given ID was not found.")
     return movie
 
 
 @router.delete("/movies/{movie_id}/", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_movie(movie_id: int, db: AsyncSession = Depends(get_postgresql_db)):
+async def delete_movie(movie_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(MovieModel).where(MovieModel.id == movie_id))
     movie_to_delete = result.scalar_one_or_none()
     if not movie_to_delete:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movie with the given ID was not found.")
-    db.delete(movie_to_delete)
+    await db.delete(movie_to_delete)
     await db.commit()
-    await db.refresh(movie_to_delete)
 
 
 @router.patch("/movies/{movie_id}/", status_code=status.HTTP_200_OK)
 async def update_movie(movie_id: int,
                        update_data: MovieUpdateRequestSchema,
-                       db: AsyncSession = Depends(get_postgresql_db)):
+                       db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(MovieModel).where(MovieModel.id == movie_id))
     movie_to_update = result.scalar_one_or_none()
     if not movie_to_update:

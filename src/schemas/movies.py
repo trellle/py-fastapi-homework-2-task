@@ -66,10 +66,10 @@ class MovieCreateRequestSchema(BaseModel):
     status: MovieStatusEnum
     budget: float = Field(ge=0)
     revenue: float = Field(ge=0)
-    country: CountrySchema
-    genres: List[GenreSchema]
-    actors: List[ActorSchema]
-    languages: List[LanguageSchema]
+    country: str
+    genres: List[str]
+    actors: List[str]
+    languages: List[str]
 
     @field_validator("date")
     def validate_date_not_too_far(cls, value: dateType):
