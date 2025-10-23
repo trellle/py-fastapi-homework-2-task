@@ -5,7 +5,7 @@ from src.database import get_db
 from src.database.models import Base, CountryModel
 
 
-async def get_or_create(model: Base, raw_data: str, db: AsyncSession = Depends(get_db)):
+async def get_or_create(model: Base, raw_data: str, db: AsyncSession):
     column = model.code if model == CountryModel else model.name
     response = await db.execute(select(model).where(column == raw_data))
     instance = response.scalar_one_or_none()

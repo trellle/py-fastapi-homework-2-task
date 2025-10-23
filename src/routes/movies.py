@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
-from sqlalchemy import select, func, distinct
-from sqlalchemy.exc import IntegrityError
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -45,7 +46,7 @@ async def get_movies(
     )
 
 
-@router.post("/movies/", response_model=MovieDetailSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/movies/", response_model=MovieCreateResponseSchema, status_code=status.HTTP_201_CREATED)
 async def create_movie(payload: MovieCreateRequestSchema,
                        db: AsyncSession = Depends(get_db)) -> MovieDetailSchema:
     response = await db.execute(
@@ -85,7 +86,7 @@ async def create_movie(payload: MovieCreateRequestSchema,
     )
     db.add(new_movie)
     await db.commit()
-    await db.refresh(new_movie)
+    await db.refresh(new_movie, attribute_names=["country", "genres", "actors", "languages"])
     return new_movie
 
 
@@ -119,26 +120,32 @@ async def delete_movie(movie_id: int, db: AsyncSession = Depends(get_db)):
 async def update_movie(movie_id: int,
                        update_data: MovieUpdateRequestSchema,
                        db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(MovieModel).where(MovieModel.id == movie_id))
-    movie_to_update = result.scalar_one_or_none()
-    if not movie_to_update:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movie with the given ID was not found.")
-    if update_data.name:
-        movie_to_update.name = update_data.name
-    if update_data.date:
-        movie_to_update.date = update_data.date
-    if update_data.score:
-        movie_to_update.score = update_data.score
-    if update_data.overview:
-        movie_to_update.overview = update_data.overview
-    if update_data.status:
-        movie_to_update.status = update_data.status
-    if update_data.budget:
-        movie_to_update.budget = update_data.budget
-    if update_data.revenue:
-        movie_to_update.revenue = update_data.revenue
-    await db.commit()
-    await db.refresh(movie_to_update)
-    return {
-        "detail": "Movie updated successfully."
-    }
+    try:
+        result = await db.execute(select(MovieModel).where(MovieModel.id == movie_id))
+        movie_to_update = result.scalar_one_or_none()
+        if not movie_to_update:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movie with the given ID was not found.")
+        if update_data.name is not None:
+            movie_to_update.name = update_data.name
+        if update_data.date is not None:
+            movie_to_update.date = update_data.date
+        if update_data.score is not None:
+            movie_to_update.score = update_data.score
+        if update_data.overview is not None:
+            movie_to_update.overview = update_data.overview
+        if update_data.status is not None:
+            movie_to_update.status = update_data.status
+        if update_data.budget is not None:
+            movie_to_update.budget = update_data.budget
+        if update_data.revenue is not None:
+            movie_to_update.revenue = update_data.revenue
+        await db.commit()
+        await db.refresh(movie_to_update)
+        return {
+            "detail": "Movie updated successfully."
+        }
+    except RequestValidationError:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"detail": "Invalid input data."},
+        )

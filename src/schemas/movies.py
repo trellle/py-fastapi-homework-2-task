@@ -1,5 +1,4 @@
 # Write your code here
-from re import S
 import pycountry
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import timedelta, date as dateType
@@ -56,7 +55,17 @@ class LanguageSchema(BaseModel):
     name: str
 
 
-class MovieCreateRequestSchema(BaseModel):
+class DateValidationMixin:
+    @field_validator("date")
+    def validate_date_not_too_far(cls, value: dateType):
+        today = dateType.today()
+        max_allowed = today + timedelta(days=365)
+        if value > max_allowed:
+            raise ValueError("The date must not be more than one year in the future.")
+        return value
+
+
+class MovieCreateRequestSchema(BaseModel, DateValidationMixin):
     model_config = ConfigDict(from_attributes=True)
 
     name: str = Field(max_length=255)
@@ -70,14 +79,6 @@ class MovieCreateRequestSchema(BaseModel):
     genres: List[str]
     actors: List[str]
     languages: List[str]
-
-    @field_validator("date")
-    def validate_date_not_too_far(cls, value: dateType):
-        today = dateType.today()
-        max_allowed = today + timedelta(days=365)
-        if value > max_allowed:
-            raise ValueError("The date must not be more than one year in the future.")
-        return value
 
     @field_validator("country")
     def validate_country(cls, value: str):
@@ -103,13 +104,13 @@ class MovieCreateResponseSchema(BaseModel):
     languages: List[LanguageSchema]
 
 
-class MovieUpdateRequestSchema(BaseModel):
+class MovieUpdateRequestSchema(BaseModel, DateValidationMixin):
     model_config = ConfigDict(from_attributes=True)
 
     name: Optional[str] = None
     date: Optional[dateType] = None
     score: Optional[float] = Field(None, ge=0, le=100)
     overview: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[MovieStatusEnum] = None
     budget: Optional[float] = Field(None, ge=0)
     revenue: Optional[float] = Field(None, ge=0)
